@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: #f0f8ff;
+      margin: 20px;
+    }
+
+    .game-container {
+      position: relative;
+      width: 800px;
+      height: 400px;
+      background: #87CEEB;
+      border: 2px solid #333;
+      border-radius: 8px;
+      margin: 20px;
+    }
+
+    .bank {
+      position: absolute;
+      width: 200px;
+      height: 380px;
+      background: #8B4513;
+      padding: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      align-content: flex-start;
+    }
+
+    #left-bank {
+      left: 0;
+    }
+
+    #right-bank {
+      right: 0;
+    }
+
+    .boat {
+      position: absolute;
+      width: 120px;
+      height: 60px;
+      background: #8B4513;
+      border-radius: 10px;
+      bottom: 50px;
+      left: 220px;
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      cursor: pointer;
+    }
+
+    .person {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      margin: 5px;
+      cursor: pointer;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      font-weight: bold;
+      transition: transform 0.2s;
+    }
+
+    .priest {
+      background: #4CAF50;
+    }
+
+    .demon {
+      background: #f44336;
+    }
+
+    .person:hover {
+      transform: scale(1.1);
+    }
+
+    .boat-slot {
+      width: 40px;
+      height: 40px;
+      border: 2px dashed #fff;
+      border-radius: 50%;
+    }
+
+    .controls {
+      margin: 20px;
+      text-align: center;
+    }
+
+    button {
+      padding: 10px 20px;
+      margin: 0 5px;
+      font-size: 16px;
+      cursor: pointer;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+    }
+
+    button:hover {
+      background: #45a049;
+    }
+
+    .status {
+      margin: 20px;
+      font-size: 18px;
+      font-weight: bold;
+    }
+
+    .rules {
+      max-width: 600px;
+      margin: 20px;
+      padding: 15px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+  </style>
+</head>
+<body>
+  <h1>Priests and Demons River Crossing</h1>
+  
+  <div class="rules">
+    <h3>Rules:</h3>
+    <ul>
+      <li>Move all priests and demons to the other side</li>
+      <li>Boat can carry maximum 2 persons</li>
+      <li>If demons outnumber priests on either bank, they'll eat the priests!</li>
+      <li>Only one person can enter/exit the boat at a time</li>
+    </ul>
+  </div>
+
+  <div class="status" id="status">Game in progress...</div>
+  
+  <div class="game-container">
+    <div class="bank" id="left-bank"></div>
+    <div class="boat" id="boat"></div>
+    <div class="bank" id="right-bank"></div>
+  </div>
+
+  <div class="controls">
+    <button onclick="moveBoat()">Move Boat</button>
+    <button onclick="resetGame()">Reset Game</button>
+  </div>
+
+  <script>
+    const gameState = {
+      leftBank: [],
+      rightBank: [],
+      boat: [],
+      boatPosition: 'left',
+      moving: false
+    };
+
+    function initializeGame() {
+      gameState.leftBank = [
+        { type: 'priest', id: 'p1' },
+        { type: 'priest', id: 'p2' },
+        { type: 'priest', id: 'p3' },
+        { type: 'demon', id: 'd1' },
+        { type: 'demon', id: 'd2' },
+        { type: 'demon', id: 'd3' }
+      ];
+      gameState.rightBank = [];
+      gameState.boat = [];
+      gameState.boatPosition = 'left';
+      gameState.moving = false;
+      
+      updateGameDisplay();
+    }
+
+    function createPerson(person) {
+      const element = document.createElement('div');
+      element.className = `person ${person.type}`;
+      element.id = person.id;
+      element.textContent = person.type === 'priest' ? 'P' : 'D';
+      element.onclick = () => handlePersonClick(person.id);
+      return element;
+    }
+
+    function updateGameDisplay() {
+      const leftBank = document.getElementById('left-bank');
+      const rightBank = document.getElementById('right-bank');
+      const boat = document.getElementById('boat');
+
+      leftBank.innerHTML = '';
+      rightBank.innerHTML = '';
+      boat.innerHTML = '';
+
+      // Add boat slots
+      boat.innerHTML = `
+        <div class="boat-slot" id="slot1"></div>
+        <div class="boat-slot" id="slot2"></div>
+      `;
+
+      gameState.leftBank.forEach(person => {
+        leftBank.appendChild(createPerson(person));
+      });
+
+      gameState.rightBank.forEach(person => {
+        rightBank.appendChild(createPerson(person));
+      });
+
+      gameState.boat.forEach(person => {
+        const slot = document.querySelector('.boat-slot:empty');
+        if (slot) {
+          slot.appendChild(createPerson(person));
+        }
+      });
+
+      boat.style.left = gameState.boatPosition === 'left' ? '220px' : '460px';
+
+      checkGameState();
+    }
+
+    function handlePersonClick(personId) {
+      if (gameState.moving) return;
+
+      const currentBank = gameState.boatPosition === 'left' ? gameState.leftBank : gameState.rightBank;
+      const person = findPerson(personId);
+
+      if (!person) return;
+
+      if (isInBoat(personId)) {
+        // Exit boat
+        gameState.boat = gameState.boat.filter(p => p.id !== personId);
+        getCurrentBank().push(person);
+      } else if (gameState.boat.length < 2 && isOnCurrentBank(personId)) {
+        // Enter boat
+        getCurrentBank().splice(getCurrentBank().findIndex(p => p.id === personId), 1);
+        gameState.boat.push(person);
+      }
+
+      updateGameDisplay();
+    }
+
+    function findPerson(personId) {
+      return [...gameState.leftBank, ...gameState.rightBank, ...gameState.boat]
+        .find(p => p.id === personId);
+    }
+
+    function isInBoat(personId) {
+      return gameState.boat.some(p => p.id === personId);
+    }
+
+    function getCurrentBank() {
+      return gameState.boatPosition === 'left' ? gameState.leftBank : gameState.rightBank;
+    }
+
+    function isOnCurrentBank(personId) {
+      return getCurrentBank().some(p => p.id === personId);
+    }
+
+    function moveBoat() {
+      if (gameState.boat.length === 0 || gameState.moving) return;
+
+      gameState.moving = true;
+      gameState.boatPosition = gameState.boatPosition === 'left' ? 'right' : 'left';
+      
+      updateGameDisplay();
+      
+      setTimeout(() => {
+        gameState.moving = false;
+      }, 1000);
+    }
+
+    function checkGameState() {
+      const checkBankSafety = (bank) => {
+        const priests = bank.filter(p => p.type === 'priest').length;
+        const demons = bank.filter(p => p.type === 'demon').length;
+        return priests === 0 || priests >= demons;
+      };
+
+      const status = document.getElementById('status');
+
+      if (!checkBankSafety(gameState.leftBank) || !checkBankSafety(gameState.rightBank)) {
+        status.textContent = 'Game Over! Demons ate the priests!';
+        status.style.color = 'red';
+        return;
+      }
+
+      if (gameState.rightBank.length === 6) {
+        status.textContent = 'Congratulations! You won!';
+        status.style.color = 'green';
+        return;
+      }
+
+      status.textContent = 'Game in progress...';
+      status.style.color = 'black';
+    }
+
+    function resetGame() {
+      initializeGame();
+    }
+
+    // Initialize the game
+    initializeGame();
+  </script>
+</body>
+</html>
